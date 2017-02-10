@@ -26,24 +26,24 @@
 
     var render = function(data) {
       var input_data = data["circuit"]["n0004.sapling.stanford.edu"]["-l 10 -p 100 -npp 2 -wpp 4 -ll:cpu 2"];
+      // FIXME: Should really do this in the preprocessing step.
+      input_data.sort(function(a, b) {
+        return Date.parse(a["date"]) - Date.parse(b["date"]);
+      });
+
       var count = input_data.length;
       var output_data = [];
+      var output_labels = [];
       for (var i = 0; i < count; i++) {
-        output_data[i] = {
-          x: Date.parse(input_data[i]["date"]),
-          y: input_data[i]["time_seconds"],
-        };
+        output_data[i] = input_data[i]["time_seconds"];
+        output_labels[i] = ["circuit", "n0004.sapling.stanford.edu", "-l 10 -p 100 -npp 2 -wpp 4 -ll:cpu 2", input_data[i]["date"], input_data[i]["commit"]];
       }
-      // FIXME: Should really do this in the preprocessing step.
-      output_data.sort(function(a, b) {
-        return a.x - b.x;
-      });
 
       var ctx = document.getElementById("myChart");
       var myChart = new Chart(ctx, {
         type: "line",
         data: {
-          labels: ["circuit"],
+          labels: output_labels, //["circuit"],
           datasets: [{
             label: "Time (seconds)",
             data: output_data,
@@ -58,12 +58,12 @@
         options: {
           responsive: true,
           maintainAspectRatio: false,
-        scales: {
-            xAxes: [{
-                type: 'linear',
-                position: 'bottom'
-            }]
-        }
+        // scales: {
+        //     xAxes: [{
+        //         type: 'linear',
+        //         position: 'bottom'
+        //     }]
+        // }
         }
       });
     }
