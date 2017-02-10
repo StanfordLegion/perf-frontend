@@ -6,7 +6,11 @@
   </head>
   <body>
 
-    <canvas id="myChart" width="400" height="400"></canvas>
+    <canvas id="chart" width="400" height="400"></canvas>
+    <label for="branch">Branch:</label>
+    <select id="branch" disabled><option value="loading">Loading...</option></select>
+    <label for="measurement_type">Measurement:</label>
+    <select id="measurement_type" disabled><option value="loading">Loading...</option></select>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/2.5.0/Chart.bundle.min.js"></script>
     <script>
     // Utility function to fetch JSON.
@@ -26,8 +30,8 @@
     };
 
     var make_line_chart = function(data) {
-      var ctx = document.getElementById("myChart");
-      var myChart = new Chart(ctx, {
+      var ctx = document.getElementById("chart");
+      window.line_chart = new Chart(ctx, {
         type: "line",
         data: data,
         options: {
@@ -38,7 +42,12 @@
           },
         },
       });
-    }
+    };
+
+    var update_line_chart_data = function(data) {
+      window.line_chart.data = data;
+      window.line_chart.update();
+    };
 
     // Generate chart data from measurements.
     var get_measurement_data = function(data, branch, measurement_type) {
@@ -145,22 +154,106 @@
         labels: labels,
         datasets: datasets,
       };
-    }
+    };
 
-    var render = function(json_data) {
+    var get_measurement_types = function(data) {
+      var commits = Object.keys(data["measurements"]);
+      var measurements = data["measurements"];
+
+      var measurement_types = [];
+      var measurement_types_seen = {};
+
+      var commit_count = commits.length;
+      for (var commit_i = 0; commit_i < commit_count; commit_i++) {
+        var commit = commits[commit_i];
+        var measurement_count = measurements[commit].length;
+        for (var measurement_i = 0; measurement_i < measurement_count; measurement_i++) {
+          var types = Object.keys(measurements[commit][measurement_i]["measurements"]);
+          var types_count = types.length;
+          for (var types_i = 0; types_i < types_count; types_i++) {
+            var type = types[types_i];
+            if (!measurement_types_seen[type]) {
+              measurement_types_seen[type] = true;
+              measurement_types.push(type);
+            }
+          }
+        }
+      }
+
+      return measurement_types;
+    };
+
+    var clear_select_options = function(select) {
+      for (var i = select.options.length - 1 ; i >= 0 ; i--) {
+        select.remove(i);
+      }
+    };
+
+    var add_select_options = function(select, options) {
+      var options_count = options.length;
+      for (var i = 0; i < options_count; i++) {
+        var option = document.createElement("option");
+        option.text = options[i];
+        select.add(option);
+      }
+    };
+
+    var make_branch_picker = function(json_data, current) {
+      var branches = json_data["branches"];
+      var current_i = branches.indexOf(current);
+
+      var branch_picker = document.getElementById("branch");
+      clear_select_options(branch_picker);
+      add_select_options(branch_picker, branches);
+      branch_picker.selectedIndex = current_i;
+      branch_picker.disabled = false;
+      branch_picker.addEventListener(
+        "change",
+        function() {
+          var branch = branch_picker.options[branch_picker.selectedIndex].text;
+          var measurement_type_picker = document.getElementById("measurement_type");
+          var measurement_type = measurement_type_picker.options[measurement_type_picker.selectedIndex].text;
+          var chart_data = get_measurement_data(json_data, branch, measurement_type);
+          update_line_chart_data(chart_data);
+        });
+    };
+
+    var make_measurement_type_picker = function(json_data, current) {
+      var measurement_types = get_measurement_types(json_data);
+      var current_i = measurement_types.indexOf(current);
+
+      var measurement_type_picker = document.getElementById("measurement_type");
+      clear_select_options(measurement_type_picker);
+      add_select_options(measurement_type_picker, measurement_types);
+      measurement_type_picker.selectedIndex = current_i;
+      measurement_type_picker.disabled = false;
+      measurement_type_picker.addEventListener(
+        "change",
+        function() {
+          var branch_picker = document.getElementById("branch");
+          var branch = branch_picker.options[branch_picker.selectedIndex].text;
+          var measurement_type = measurement_type_picker.options[measurement_type_picker.selectedIndex].text;
+          var chart_data = get_measurement_data(json_data, branch, measurement_type);
+          update_line_chart_data(chart_data);
+        });
+    };
+
+    var initialize = function(json_data) {
       // Right now just render the master branch and execution time.
       var branch = "master";
       var measurement_type = "time_seconds";
       var chart_data = get_measurement_data(json_data, branch, measurement_type);
       make_line_chart(chart_data);
-    }
+      make_branch_picker(json_data, branch);
+      make_measurement_type_picker(json_data, measurement_type);
+    };
 
     getJSON("https://raw.githubusercontent.com/StanfordLegion/perf-data/master/rendered/chart.json",
       function(err, data) {
         if (err != null) {
           alert("Error: " + err);
         } else {
-          render(data);
+          initialize(data);
         }
       });
 
