@@ -33,7 +33,10 @@
         options: {
           responsive: true,
           maintainAspectRatio: false,
-        }
+          legend: {
+            position: "left",
+          },
+        },
       });
     }
 
@@ -123,7 +126,7 @@
               pointHoverRadius: 10,
               backgroundColor: color,
               borderColor: color,
-              borderWidth: 2,
+              borderWidth: 3,
             }
             datasets.push(dataset);
           }
@@ -151,13 +154,13 @@
     }
 
     getJSON("https://raw.githubusercontent.com/StanfordLegion/perf-data/master/rendered/chart.json",
-    function(err, data) {
-      if (err != null) {
-        alert("Error: " + err);
-      } else {
-        render(data);
-      }
-    });
+      function(err, data) {
+        if (err != null) {
+          alert("Error: " + err);
+        } else {
+          render(data);
+        }
+      });
 
     </script>
   </body>
