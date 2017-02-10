@@ -130,8 +130,16 @@
         }
       }
 
+      var labels = [];
+      var commit_count = commits.length;
+      for (var commit_i = 0; commit_i < commit_count; commit_i++) {
+        var commit = commits[commit_i];
+        var label = commit.substring(0, 7);
+        labels.push(label);
+      }
+
       return {
-        labels: commits,
+        labels: labels,
         datasets: datasets,
       };
     }
