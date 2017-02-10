@@ -9,6 +9,7 @@
     <canvas id="myChart" width="400" height="400"></canvas>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/2.5.0/Chart.bundle.min.js"></script>
     <script>
+    // Utility function to fetch JSON.
     var getJSON = function(url, callback) {
       var xhr = new XMLHttpRequest();
       xhr.open("get", url, true);
@@ -24,48 +25,121 @@
       xhr.send();
     };
 
-    var render = function(data) {
-      var input_data = data["circuit"]["n0004.sapling.stanford.edu"]["-l 10 -p 100 -npp 2 -wpp 4 -ll:cpu 2"];
-      // FIXME: Should really do this in the preprocessing step.
-      input_data.sort(function(a, b) {
-        return Date.parse(a["date"]) - Date.parse(b["date"]);
-      });
-
-      var count = input_data.length;
-      var output_data = [];
-      var output_labels = [];
-      for (var i = 0; i < count; i++) {
-        output_data[i] = input_data[i]["time_seconds"];
-        output_labels[i] = ["circuit", "n0004.sapling.stanford.edu", "-l 10 -p 100 -npp 2 -wpp 4 -ll:cpu 2", input_data[i]["date"], input_data[i]["commit"]];
-      }
-
+    var make_line_chart = function(data) {
       var ctx = document.getElementById("myChart");
       var myChart = new Chart(ctx, {
         type: "line",
-        data: {
-          labels: output_labels, //["circuit"],
-          datasets: [{
-            label: "Time (seconds)",
-            data: output_data,
-            fill: false,
-            pointRadius: 7,
-            pointHoverRadius: 10,
-            backgroundColor: 'rgba(255,99,132,1)',
-            borderColor: 'rgba(255,99,132,1)',
-            borderWidth: 1
-          }],
-        },
+        data: data,
         options: {
           responsive: true,
           maintainAspectRatio: false,
-        // scales: {
-        //     xAxes: [{
-        //         type: 'linear',
-        //         position: 'bottom'
-        //     }]
-        // }
         }
       });
+    }
+
+    // Generate chart data from measurements.
+    var get_measurement_data = function(data, branch) {
+      var commits = data["commits"][branch];
+      var measurements = data["measurements"];
+      var data_by_benchmark_argv_host_commit = {};
+
+      var benchmarks = [];
+      var argv_by_benchmark = {};
+      var host_by_benchmark_argv = {};
+
+      var commit_count = commits.length;
+      for (var commit_i = 0; commit_i < commit_count; commit_i++) {
+        var commit = commits[commit_i];
+        var measurement_count = measurements[commit].length;
+        for (var measurement_i = 0; measurement_i < measurement_count; measurement_i++) {
+          var measurement = measurements[commit][measurement_i];
+          if (measurement["metadata"]["branch"] == branch) {
+            var benchmark = measurement["metadata"]["benchmark"];
+            var argv = measurement["metadata"]["argv"];
+            var host = measurement["metadata"]["host"];
+
+            if (!data_by_benchmark_argv_host_commit[benchmark]) {
+              data_by_benchmark_argv_host_commit[benchmark] = {};
+              benchmarks.push(benchmark);
+              argv_by_benchmark[benchmark] = [];
+              host_by_benchmark_argv[benchmark] = {};
+            }
+            if (!data_by_benchmark_argv_host_commit[benchmark][argv]) {
+              data_by_benchmark_argv_host_commit[benchmark][argv] = {};
+              argv_by_benchmark[benchmark].push(argv);
+              host_by_benchmark_argv[benchmark][argv] = [];
+            }
+            if (!data_by_benchmark_argv_host_commit[benchmark][argv][host]) {
+              data_by_benchmark_argv_host_commit[benchmark][argv][host] = {};
+              host_by_benchmark_argv[benchmark][argv].push(host);
+            }
+            // FIXME: If there are multiple matching entries, this
+            // will just pick one. Would be nice to take a mean or
+            // something.
+            data_by_benchmark_argv_host_commit[benchmark][argv][host][commit] =
+              measurement["measurements"]["time_seconds"];
+          }
+        }
+      }
+
+      var colors = [
+        'rgba(255,99,132,1)',
+        'rgba(54, 162, 235, 1)',
+        'rgba(255, 206, 86, 1)',
+        'rgba(75, 192, 192, 1)',
+        'rgba(153, 102, 255, 1)',
+        'rgba(255, 159, 64, 1)'
+      ];
+      var color_count = colors.length;
+      var color_i = 0;
+
+      var datasets = [];
+      var benchmark_count = benchmarks.length;
+      for (var benchmark_i = 0; benchmark_i < benchmark_count; benchmark_i++) {
+        var benchmark = benchmarks[benchmark_i];
+        var argv_count = argv_by_benchmark[benchmark].length;
+        for (var argv_i = 0; argv_i < argv_count; argv_i++) {
+          var argv = argv_by_benchmark[benchmark][argv_i];
+          var host_count = host_by_benchmark_argv[benchmark][argv].length;
+          for (var host_i = 0; host_i < host_count; host_i++) {
+            var host = host_by_benchmark_argv[benchmark][argv][host_i];
+
+            var data = [];
+            var measurements = data_by_benchmark_argv_host_commit[benchmark][argv][host];
+            var commit_count = commits.length;
+            for (var commit_i = 0; commit_i < commit_count; commit_i++) {
+              var commit = commits[commit_i];
+              data.push(measurements[commit]);
+            }
+
+            var color = colors[color_i];
+            color_i = (color_i + 1) % color_count;
+
+            var dataset = {
+              label: benchmark + " / " + argv + " / " + host,
+              data: data,
+              fill: false,
+              pointRadius: 7,
+              pointHoverRadius: 10,
+              backgroundColor: color,
+              borderColor: color,
+              borderWidth: 2,
+            }
+            datasets.push(dataset);
+          }
+        }
+      }
+
+      return {
+        labels: commits,
+        datasets: datasets,
+      };
+    }
+
+    var render = function(json_data) {
+      var branch = "master"; // Right now just render master branch.
+      var chart_data = get_measurement_data(json_data, branch);
+      make_line_chart(chart_data);
     }
 
     getJSON("https://raw.githubusercontent.com/StanfordLegion/perf-data/master/rendered/chart.json",
