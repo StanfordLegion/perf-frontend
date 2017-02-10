@@ -41,7 +41,7 @@
     }
 
     // Generate chart data from measurements.
-    var get_measurement_data = function(data, branch) {
+    var get_measurement_data = function(data, branch, measurement_type) {
       var commits = data["commits"][branch];
       var measurements = data["measurements"];
       var data_by_benchmark_argv_host_commit = {};
@@ -80,7 +80,7 @@
             // will just pick one. Would be nice to take a mean or
             // something.
             data_by_benchmark_argv_host_commit[benchmark][argv][host][commit] =
-              measurement["measurements"]["time_seconds"];
+              measurement["measurements"][measurement_type];
           }
         }
       }
@@ -148,8 +148,10 @@
     }
 
     var render = function(json_data) {
-      var branch = "master"; // Right now just render master branch.
-      var chart_data = get_measurement_data(json_data, branch);
+      // Right now just render the master branch and execution time.
+      var branch = "master";
+      var measurement_type = "time_seconds";
+      var chart_data = get_measurement_data(json_data, branch, measurement_type);
       make_line_chart(chart_data);
     }
 
