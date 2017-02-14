@@ -65,47 +65,117 @@
       window.line_chart.update();
     };
 
-    // Generate chart data from measurements.
-    var get_measurement_data = function(data, branch, measurement_type) {
-      var commits = data["commits"][branch];
-      var measurements = data["measurements"];
-      var data_by_benchmark_argv_host_commit = defaultdict(function() {
-        return defaultdict(function() {
-          return defaultdict(function() { return []; });
+    // Build an index of data points from the JSON data of the form:
+    //   branches: [branch]
+    //   measurement_types: [measurement_type]
+    //   benchmarks: [benchmark]
+    //   argvs: [argv]
+    //   hosts: [hosts]
+    //   commits: [commit] sorted by earliest measurement date
+    //   index: branch -> measurement_type -> benchmark -> argv -> host -> commit -> data
+    var build_data_index = function(data) {
+      var branches = {};
+      var measurement_types = {};
+      var benchmarks = {};
+      var argvs = {};
+      var hosts = {};
+      var commits = {};
+      var data_by_key = defaultdict(function() {  // branch
+        return defaultdict(function() {           // measurement_type
+          return defaultdict(function() {         // benchmark
+            return defaultdict(function() {       // argv
+              return defaultdict(function() {     // host
+                return defaultdict(function() { return {}; }); // commit -> value
+              });
+            });
+          });
         });
       });
 
-      var benchmarks = [];
-      var argv_by_benchmark = defaultdict(function() { return []; });
-      var host_by_benchmark_argv = defaultdict(function() {
-        return defaultdict(function() { return []; });
-      });
+      Object.keys(data.commits).forEach(function(branch) {
+        data.commits[branch].forEach(function(commit) {
+          data.measurements[commit].forEach(function(measurement) {
+            if (measurement.metadata.branch == branch) {
+              var benchmark = measurement.metadata.benchmark;
+              var argv = measurement.metadata.argv;
+              var host = measurement.metadata.host;
 
-      commits.forEach(function(commit) {
-        measurements[commit].forEach(function(measurement) {
-          if (measurement["metadata"]["branch"] == branch) {
-            var benchmark = measurement["metadata"]["benchmark"];
-            var argv = measurement["metadata"]["argv"];
-            var host = measurement["metadata"]["host"];
+              branches[branch] = true;
+              benchmarks[benchmark] = true;
+              argvs[argv] = true;
+              hosts[host] = true;
 
-            if (!(benchmark in data_by_benchmark_argv_host_commit)) {
-              benchmarks.push(benchmark);
+              var date = Date.parse(measurement.metadata.date);
+              if (!(commit in commits) || date < commits[commit]) {
+                commits[commit] = date;
+              }
+
+              Object.keys(measurement.measurements).forEach(function(type) {
+                var value = measurement.measurements[type];
+                measurement_types[type] = true;
+
+                data_by_key[branch][type][benchmark][argv][host][commit] = value;
+              });
             }
-            if (!(argv in data_by_benchmark_argv_host_commit[benchmark])) {
-              argv_by_benchmark[benchmark].push(argv);
-            }
-            if (!(host in data_by_benchmark_argv_host_commit[benchmark][argv])) {
-              host_by_benchmark_argv[benchmark][argv].push(host);
-            }
-            // FIXME: If there are multiple matching entries, this
-            // will just pick one. Would be nice to take a mean or
-            // something.
-            data_by_benchmark_argv_host_commit[benchmark][argv][host][commit] =
-              measurement["measurements"][measurement_type];
-          }
+          });
         });
       });
 
+      return {
+        branches: Object.keys(branches).sort(),
+        measurement_types: Object.keys(measurement_types).sort(),
+        benchmarks: Object.keys(benchmarks).sort(),
+        argvs: Object.keys(argvs).sort(),
+        hosts: Object.keys(hosts).sort(),
+        commits: Object.keys(commits).sort(function(a, b) {
+          return commits[a] - commits[b];
+        }),
+        index: data_by_key,
+      };
+    }
+
+    var make_dataset_label = function(selection, branch, type, benchmark, argv, host) {
+      var label = [];
+      if (selection.branches.length > 1) {
+        label.push(branch);
+      }
+      if (selection.measurement_types.length > 1) {
+        label.push(type);
+      }
+      if (selection.benchmarks.length > 1) {
+        label.push(benchmark);
+      }
+      if (selection.argvs.length > 1) {
+        label.push(argv);
+      }
+      if (selection.hosts.length > 1) {
+        label.push(host);
+      }
+
+      return label.join(" / ");
+    }
+
+    // Uses the data index and current selection to generate datasets.
+    var filter_datasets = function(data, selection) {
+      // Compute which commits are actually used in this selection.
+      var commits_used = {};
+      selection.branches.forEach(function(branch) {
+        selection.measurement_types.forEach(function(type) {
+          selection.benchmarks.forEach(function(benchmark) {
+            selection.argvs.forEach(function(argv) {
+              selection.hosts.forEach(function(host) {
+                data.commits.forEach(function(commit) {
+                  if (commit in data.index[branch][type][benchmark][argv][host]) {
+                    commits_used[commit] = true;
+                  }
+                });
+              });
+            });
+          });
+        });
+      });
+
+      // Use round-robin assignment for colors.
       var colors = [
         'rgba(255,99,132,1)',
         'rgba(54, 162, 235, 1)',
@@ -117,35 +187,47 @@
       var color_count = colors.length;
       var color_i = 0;
 
+      // Compute datasets.
       var datasets = [];
-      benchmarks.forEach(function(benchmark) {
-        argv_by_benchmark[benchmark].forEach(function(argv) {
-          host_by_benchmark_argv[benchmark][argv].forEach(function(host) {
-            var data = [];
-            var measurements = data_by_benchmark_argv_host_commit[benchmark][argv][host];
-            commits.forEach(function(commit) {
-              data.push(measurements[commit]);
+      selection.branches.forEach(function(branch) {
+        selection.measurement_types.forEach(function(type) {
+          selection.benchmarks.forEach(function(benchmark) {
+            selection.argvs.forEach(function(argv) {
+              selection.hosts.forEach(function(host) {
+                var has_values = false;
+                var values = [];
+                data.commits.forEach(function(commit) {
+                  if (commit in commits_used) {
+                    has_values = true;
+                    values.push(data.index[branch][type][benchmark][argv][host][commit]);
+                  }
+                });
+
+                if (has_values) {
+                  var color = colors[color_i];
+                  color_i = (color_i + 1) % color_count;
+
+                  var dataset = {
+                    label: make_dataset_label(selection, branch, type, benchmark, argv, host),
+                    data: values,
+                    fill: false,
+                    pointRadius: 7,
+                    pointHoverRadius: 10,
+                    backgroundColor: color,
+                    borderColor: color,
+                    borderWidth: 3,
+                  }
+                  datasets.push(dataset);
+                }
+              });
             });
-
-            var color = colors[color_i];
-            color_i = (color_i + 1) % color_count;
-
-            var dataset = {
-              label: benchmark + " / " + argv + " / " + host,
-              data: data,
-              fill: false,
-              pointRadius: 7,
-              pointHoverRadius: 10,
-              backgroundColor: color,
-              borderColor: color,
-              borderWidth: 3,
-            }
-            datasets.push(dataset);
           });
         });
       });
 
-      var labels = commits.map(function(commit) {
+      var labels = data.commits.filter(function(commit) {
+        return commit in commits_used;
+      }).map(function(commit) {
         return commit.substring(0, 7);
       });
 
@@ -153,18 +235,18 @@
         labels: labels,
         datasets: datasets,
       };
-    };
+    }
 
     var get_measurement_types = function(data) {
-      var commits = Object.keys(data["measurements"]);
-      var measurements = data["measurements"];
+      var commits = Object.keys(data.measurements);
+      var measurements = data.measurements;
 
       var measurement_types = [];
       var measurement_types_seen = {};
 
       commits.forEach(function(commit) {
         measurements[commit].forEach(function(measurement) {
-          Object.keys(measurement["measurements"]).forEach(function(type) {
+          Object.keys(measurement.measurements).forEach(function(type) {
             if (!measurement_types_seen[type]) {
               measurement_types_seen[type] = true;
               measurement_types.push(type);
@@ -191,7 +273,7 @@
     };
 
     var make_branch_picker = function(json_data, current) {
-      var branches = json_data["branches"];
+      var branches = json_data.branches;
       var current_i = branches.indexOf(current);
 
       var branch_picker = document.getElementById("branch");
@@ -234,10 +316,21 @@
       // Right now just render the master branch and execution time.
       var branch = "master";
       var measurement_type = "time_seconds";
-      var chart_data = get_measurement_data(json_data, branch, measurement_type);
+
+      var data_index = build_data_index(json_data);
+      var selection = {
+        branches: [branch],
+        measurement_types: [measurement_type],
+        benchmarks: data_index.benchmarks,
+        argvs: data_index.argvs,
+        hosts: data_index.hosts,
+      };
+      var chart_data = filter_datasets(data_index, selection);
+
       make_line_chart(chart_data);
       make_branch_picker(json_data, branch);
       make_measurement_type_picker(json_data, measurement_type);
+
     };
 
     getJSON("https://raw.githubusercontent.com/StanfordLegion/perf-data/master/rendered/chart.json",
