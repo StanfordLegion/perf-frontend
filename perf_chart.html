@@ -62,12 +62,8 @@
       var argv_by_benchmark = {};
       var host_by_benchmark_argv = {};
 
-      var commit_count = commits.length;
-      for (var commit_i = 0; commit_i < commit_count; commit_i++) {
-        var commit = commits[commit_i];
-        var measurement_count = measurements[commit].length;
-        for (var measurement_i = 0; measurement_i < measurement_count; measurement_i++) {
-          var measurement = measurements[commit][measurement_i];
+      commits.forEach(function(commit) {
+        measurements[commit].forEach(function(measurement) {
           if (measurement["metadata"]["branch"] == branch) {
             var benchmark = measurement["metadata"]["benchmark"];
             var argv = measurement["metadata"]["argv"];
@@ -94,8 +90,8 @@
             data_by_benchmark_argv_host_commit[benchmark][argv][host][commit] =
               measurement["measurements"][measurement_type];
           }
-        }
-      }
+        });
+      });
 
       var colors = [
         'rgba(255,99,132,1)',
@@ -109,23 +105,14 @@
       var color_i = 0;
 
       var datasets = [];
-      var benchmark_count = benchmarks.length;
-      for (var benchmark_i = 0; benchmark_i < benchmark_count; benchmark_i++) {
-        var benchmark = benchmarks[benchmark_i];
-        var argv_count = argv_by_benchmark[benchmark].length;
-        for (var argv_i = 0; argv_i < argv_count; argv_i++) {
-          var argv = argv_by_benchmark[benchmark][argv_i];
-          var host_count = host_by_benchmark_argv[benchmark][argv].length;
-          for (var host_i = 0; host_i < host_count; host_i++) {
-            var host = host_by_benchmark_argv[benchmark][argv][host_i];
-
+      benchmarks.forEach(function(benchmark) {
+        argv_by_benchmark[benchmark].forEach(function(argv) {
+          host_by_benchmark_argv[benchmark][argv].forEach(function(host) {
             var data = [];
             var measurements = data_by_benchmark_argv_host_commit[benchmark][argv][host];
-            var commit_count = commits.length;
-            for (var commit_i = 0; commit_i < commit_count; commit_i++) {
-              var commit = commits[commit_i];
+            commits.forEach(function(commit) {
               data.push(measurements[commit]);
-            }
+            });
 
             var color = colors[color_i];
             color_i = (color_i + 1) % color_count;
@@ -141,17 +128,13 @@
               borderWidth: 3,
             }
             datasets.push(dataset);
-          }
-        }
-      }
+          });
+        });
+      });
 
-      var labels = [];
-      var commit_count = commits.length;
-      for (var commit_i = 0; commit_i < commit_count; commit_i++) {
-        var commit = commits[commit_i];
-        var label = commit.substring(0, 7);
-        labels.push(label);
-      }
+      var labels = commits.map(function(commit) {
+        return commit.substring(0, 7);
+      });
 
       return {
         labels: labels,
@@ -166,22 +149,16 @@
       var measurement_types = [];
       var measurement_types_seen = {};
 
-      var commit_count = commits.length;
-      for (var commit_i = 0; commit_i < commit_count; commit_i++) {
-        var commit = commits[commit_i];
-        var measurement_count = measurements[commit].length;
-        for (var measurement_i = 0; measurement_i < measurement_count; measurement_i++) {
-          var types = Object.keys(measurements[commit][measurement_i]["measurements"]);
-          var types_count = types.length;
-          for (var types_i = 0; types_i < types_count; types_i++) {
-            var type = types[types_i];
+      commits.forEach(function(commit) {
+        measurements[commit].forEach(function(measurement) {
+          Object.keys(measurement["measurements"]).forEach(function(type) {
             if (!measurement_types_seen[type]) {
               measurement_types_seen[type] = true;
               measurement_types.push(type);
             }
-          }
-        }
-      }
+          });
+        });
+      });
 
       return measurement_types;
     };
@@ -192,13 +169,12 @@
       }
     };
 
-    var add_select_options = function(select, options) {
-      var options_count = options.length;
-      for (var i = 0; i < options_count; i++) {
+    var add_select_options = function(select, labels) {
+      labels.forEach(function(label) {
         var option = document.createElement("option");
-        option.text = options[i];
+        option.text = label;
         select.add(option);
-      }
+      });
     };
 
     var make_branch_picker = function(json_data, current) {
