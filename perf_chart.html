@@ -16,6 +16,19 @@
     <select id="measurement_type" disabled><option value="loading">Loading...</option></select>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/2.5.0/Chart.bundle.min.js"></script>
     <script>
+    // A Python defaultdict style map object
+    var defaultdict = function(constructor) {
+      return new Proxy({}, {
+        get: function(target, property) {
+          if (!(property in target)) {
+            var value = constructor();
+            target[property] = value;
+          }
+          return target[property];
+        },
+      });
+    };
+
     // Utility function to fetch JSON.
     var getJSON = function(url, callback) {
       var xhr = new XMLHttpRequest();
@@ -56,11 +69,17 @@
     var get_measurement_data = function(data, branch, measurement_type) {
       var commits = data["commits"][branch];
       var measurements = data["measurements"];
-      var data_by_benchmark_argv_host_commit = {};
+      var data_by_benchmark_argv_host_commit = defaultdict(function() {
+        return defaultdict(function() {
+          return defaultdict(function() { return []; });
+        });
+      });
 
       var benchmarks = [];
-      var argv_by_benchmark = {};
-      var host_by_benchmark_argv = {};
+      var argv_by_benchmark = defaultdict(function() { return []; });
+      var host_by_benchmark_argv = defaultdict(function() {
+        return defaultdict(function() { return []; });
+      });
 
       commits.forEach(function(commit) {
         measurements[commit].forEach(function(measurement) {
@@ -69,19 +88,13 @@
             var argv = measurement["metadata"]["argv"];
             var host = measurement["metadata"]["host"];
 
-            if (!data_by_benchmark_argv_host_commit[benchmark]) {
-              data_by_benchmark_argv_host_commit[benchmark] = {};
+            if (!(benchmark in data_by_benchmark_argv_host_commit)) {
               benchmarks.push(benchmark);
-              argv_by_benchmark[benchmark] = [];
-              host_by_benchmark_argv[benchmark] = {};
             }
-            if (!data_by_benchmark_argv_host_commit[benchmark][argv]) {
-              data_by_benchmark_argv_host_commit[benchmark][argv] = {};
+            if (!(argv in data_by_benchmark_argv_host_commit[benchmark])) {
               argv_by_benchmark[benchmark].push(argv);
-              host_by_benchmark_argv[benchmark][argv] = [];
             }
-            if (!data_by_benchmark_argv_host_commit[benchmark][argv][host]) {
-              data_by_benchmark_argv_host_commit[benchmark][argv][host] = {};
+            if (!(host in data_by_benchmark_argv_host_commit[benchmark][argv])) {
               host_by_benchmark_argv[benchmark][argv].push(host);
             }
             // FIXME: If there are multiple matching entries, this
