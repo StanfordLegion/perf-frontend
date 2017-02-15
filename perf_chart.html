@@ -218,7 +218,11 @@
                 data.commits.forEach(function(commit) {
                   if (commit in commits_used) {
                     has_values = true;
-                    values.push(data.index[branch][type][benchmark][argv][host][commit]);
+                    var value;
+                    if (commit in data.index[branch][type][benchmark][argv][host]) {
+                      value = data.index[branch][type][benchmark][argv][host][commit];
+                    }
+                    values.push(value);
                   }
                 });
 
@@ -305,8 +309,6 @@
             }
           });
         });
-
-        console.log(selection);
 
         var chart_data = filter_datasets(data_index, selection);
         update_line_chart_data(chart_data);
