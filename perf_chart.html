@@ -349,17 +349,13 @@
     }
 
     var initialize = function(json_data) {
-      // Right now just render the master branch and execution time.
-      var branch = "master";
-      var measurement_type = "time_seconds";
-
       var data_index = build_data_index(json_data);
       var selection = {
-        branches: [branch],
-        measurement_types: [measurement_type],
+        branches: ["master"],
+        measurement_types: ["time_seconds"],
         benchmarks: data_index.benchmarks,
         argvs: data_index.argvs,
-        hosts: data_index.hosts,
+        hosts: ["n0002.sapling.stanford.edu", "n0004.sapling.stanford.edu"],
       };
       var chart_data = filter_datasets(data_index, selection);
 
