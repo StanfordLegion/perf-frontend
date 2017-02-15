@@ -314,12 +314,57 @@
       add_list_items(id, picker, elements, selection);
     };
 
-    var add_event_listeners = function(ids, data_keys, data_index) {
-      var listener = function() {
-        var selection = {};
+    var get_default_selection = function(data_index) {
+      return {
+        branches: ["master"],
+        measurement_types: ["time_seconds"],
+        benchmarks: ["circuit"],
+        argvs: data_index.argvs,
+        hosts: ["n0002.sapling.stanford.edu", "n0004.sapling.stanford.edu"],
+      };
+    };
 
-        // For now, always include all argv values.
-        selection.argvs = data_index.argvs;
+    var parse_query_from_location = function() {
+      // Adapted from: http://stackoverflow.com/a/8486188
+      var query = location.search.substr(1);
+      var result = {};
+      query.split("&").forEach(function(part) {
+        if (!part) return;
+        part = part.split("+").join(" ");
+        var eq = part.indexOf("=");
+        var key = eq > -1 ? part.substr(0, eq) : part;
+        var val = eq > -1 ? decodeURIComponent(part.substr(eq + 1)) : "";
+        result[decodeURIComponent(key)] = val.split(",");
+      });
+      return result;
+    };
+
+    var parse_selection_from_location = function(data_keys, data_index) {
+      var query = parse_query_from_location();
+
+      var selection = get_default_selection(data_index);
+
+      data_keys.forEach(function(data_key) {
+        if (data_key in query) {
+          selection[data_key] = query[data_key];
+        }
+      });
+
+      return selection;
+    };
+
+    var get_query_for_selection = function(selection) {
+      return "?" + Object.keys(selection).filter(function(key) {
+        return key != "argvs";
+      }).map(function(key) {
+        return key + "=" + selection[key].join(",");
+      }).join("&");
+    };
+
+    var add_event_listeners = function(ids, data_keys, data_index) {
+      // Update selection on checkbox click.
+      var listener = function() {
+        var selection = get_default_selection(data_index);
 
         data_keys.forEach(function(data_key, index) {
           selection[data_key] = [];
@@ -336,8 +381,11 @@
 
         var chart_data = filter_datasets(data_index, selection);
         update_line_chart_data(chart_data);
+
+        history.pushState({}, "", get_query_for_selection(selection));
       };
 
+      // Add listener to each checkbox.
       data_keys.forEach(function(data_key, index) {
         var list_id = ids[index];
         data_index[data_key].forEach(function(element) {
@@ -346,29 +394,39 @@
           checkbox.addEventListener("change", listener);
         });
       });
+
+      // Update selection when navigating to a new URL.
+      window.onpopstate = function() {
+        var selection = parse_selection_from_location(data_keys, data_index);
+        var chart_data = filter_datasets(data_index, selection);
+        update_line_chart_data(chart_data);
+
+        // Update the checkboxes so the UI stays consistent.
+        data_keys.forEach(function(data_key, index) {
+          var list_id = ids[index];
+          data_index[data_key].forEach(function(element) {
+            var element_id = list_id + "_" + element;
+            var checkbox = document.getElementById(element_id);
+            checkbox.checked = selection[data_key].indexOf(element) != -1;
+          });
+        });
+      };
     }
 
     var initialize = function(json_data) {
+      var ids = ["branch", "measurement_type", "benchmark", "host"];
+      var data_keys = ["branches", "measurement_types", "benchmarks", "hosts"];
+
       var data_index = build_data_index(json_data);
-      var selection = {
-        branches: ["master"],
-        measurement_types: ["time_seconds"],
-        benchmarks: data_index.benchmarks,
-        argvs: data_index.argvs,
-        hosts: ["n0002.sapling.stanford.edu", "n0004.sapling.stanford.edu"],
-      };
+      var selection = parse_selection_from_location(data_keys, data_index);
       var chart_data = filter_datasets(data_index, selection);
 
       make_line_chart(chart_data);
-      make_element_picker("branch", data_index.branches, selection.branches);
-      make_element_picker("measurement_type", data_index.measurement_types, selection.measurement_types);
-      make_element_picker("benchmark", data_index.benchmarks, selection.benchmarks);
-      make_element_picker("host", data_index.hosts, selection.hosts);
-      add_event_listeners(
-        ["branch", "measurement_type", "benchmark", "host"],
-        ["branches", "measurement_types", "benchmarks", "hosts"],
-        data_index
-      );
+      data_keys.forEach(function(data_key, i) {
+        var id = ids[i];
+        make_element_picker(id, data_index[data_key], selection[data_key]);
+      });
+      add_event_listeners(ids, data_keys, data_index);
     };
 
     getJSON("https://raw.githubusercontent.com/StanfordLegion/perf-data/master/rendered/chart.json",
