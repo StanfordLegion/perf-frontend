@@ -25,6 +25,7 @@ from string import Template
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 import numpy
+import getpass
 import re
 data_per_branch_per_application = namedtuple("data_per_branch_per_application",
                                              ["branch", "commit", "date", "timing", "appArg"])
@@ -180,9 +181,12 @@ def process_application_results(applicationResults, branches):
                     specialRunOnlyOnceWhy.add(latest)
                 else:
                     sdPerfValue = standard_deviation(perfValues)
+    		    #print("sd value is %lf\n, comparing it with latest:%s\n" %(sdPerfValue, latest.timing))
+		    latest_timing_val = (float)(latest.timing) 
                     #flag the author and commit, if we do not satisfy the result, even a perf gain is flagged
-                    if ((latest.timing < .95 * sdPerfValue) | (latest.timing > 1.05 * sdPerfValue)):
+                    if ((latest_timing_val < .95 * sdPerfValue) | (latest_timing_val > 1.05 * sdPerfValue)):
                         authorsAndMessages.add((latest, application, sdPerfValue))
+    		    #print("done with the comparison sd value is %lf\n" %(sdPerfValue))
 
 
 def push_json_file(repo_url, path, value):
@@ -210,6 +214,7 @@ def send_email(name, email, message_template):
     # name, email = 'Elliott Slaughter', 'slaughter@cs.stanford.edu'  # read the commit author
     # message_template = "hello, your commit screwed the performance"
 
+    PASSWORD = getpass.getpass()
     # set up the SMTP server
     s = smtplib.SMTP(host='smtp.stanford.edu', port=587)  # could be 25 or 2525
     s.starttls()
@@ -218,25 +223,22 @@ def send_email(name, email, message_template):
     # For each contact, send the email:
     # for name, email in zip(names, emails):
     msg = MIMEMultipart()  # create a message
-
     # add in the actual person name to the message template
-    message = message_template.substitute(PERSON_NAME=name.title())
-
+    # message = message_template.substitute(PERSON_NAME=name.title())
     # Prints out the message body for our sake
-    print(message)
-
+    # print(message)
     # setup the parameters of the message
     msg['From'] = MY_ADDRESS
     msg['To'] = email
-    msg['Subject'] = "This is TEST"
+    msg['Subject'] = "Latest Commit Performance Regression Results"
 
     # add in the message body
-    msg.attach(MIMEText(message, 'plain'))
+    msg.attach(MIMEText(message_template, 'plain'))
 
     # send the message via the server set up earlier.
     # s.send_message(msg)
     # ENABLE ONLY AT THE END,
-    ############ s.sendmail(MY_ADDRESS, email, msg.as_string())
+    s.sendmail(MY_ADDRESS, email, msg.as_string())
     del msg
 
     # Terminate the SMTP session and close the connection
@@ -244,13 +246,11 @@ def send_email(name, email, message_template):
 
 def sendOutEmail():
 
-    #tmp_dir = "/Users/ksmurthy/Work/PERF_EXPERIMENTS/perf-data/test-legion"#
-    tmp_dir = tempfile.mkdtemp()
+    tmp_dir = "/home/users/ksmurthy/perf-data/test-legion-data" #
+    #tmp_dir = tempfile.mkdtemp()
     try:
         print(tmp_dir)
-        subprocess.check_call(
-            ['git', 'clone', 'http://github.com/stanfordlegion/legion.git', 'legion'],
-            cwd=tmp_dir)
+        subprocess.check_call( ['git', 'clone', 'http://github.com/stanfordlegion/legion.git', 'legion'], cwd=tmp_dir)
         commitCheckDir = os.path.join(tmp_dir, 'legion')
         gitShowAuthor = 'show' # --format="%aN <%aE>"'
         # for all authors in author and messages, send out the message
@@ -281,15 +281,17 @@ def sendOutEmail():
             except subprocess.CalledProcessError:
                 branchNotFound.add(commitEntry)
     finally:
-        shutil.rmtree(tmp_dir)
+        shutil.rmtree(commitCheckDir)
+	print("about to send out the emails\n")
     for name in finalSetOfEmails:
         messageTemplate = finalSetOfEmails[name]
         email = nameEmail[name]
         print ("%s name %s email %s messagetempl" %(name, email, messageTemplate))
         #send_email(name, email, message_template)
+    send_email("karthik", "ksmurthy@stanford.edu", "hello")
 
 def driver():
-    # measurement_url https://github.com/StanfordLegion/perf-data/tree/master/measurements/circuit
+    # measurement_url https://github.com/StanfordLegion/perf-data/
     parser = argparse.ArgumentParser(
         description='Render Legion performance charts')
     parser.add_argument('measurement_url', help='measurement repository URL')
